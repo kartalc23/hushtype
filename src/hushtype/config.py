@@ -84,10 +84,12 @@ class TextConfig:
     vocabulary: str = "vocabulary.txt"
     style: str = "style.txt"
     replacements: str = "replacements.txt"
-    # Whisper's prompt window is 224 tokens. Prompt + hotwords that overflow it
-    # leave no room for output ("maximum decoding length must be > 0").
-    max_vocabulary_terms: int = 35
-    max_style_words: int = 35
+    # Tokens shared by the style sample and the vocabulary. Whisper's context is
+    # 448 tokens; whatever the prompt takes is unavailable for the transcript,
+    # and overflowing it fails with "maximum decoding length must be > 0".
+    # The style sample is used first (up to half), vocabulary terms fill the
+    # rest in file order. 224 mirrors how Whisper was trained.
+    prompt_token_budget: int = 224
 
 
 @dataclass
@@ -135,7 +137,46 @@ def parse(data: dict) -> Config:
         _apply(getattr(cfg, section), values, section)
     if cfg.model.device not in ("auto", "cuda", "cpu"):
         raise ConfigError('[model] device must be "auto", "cuda" or "cpu"')
+    if not 32 <= cfg.text.prompt_token_budget <= 300:
+        raise ConfigError("[text] prompt_token_budget must be between 32 and 300")
     return cfg
+
+
+# ---------------------------------------------------------------- writing
+
+
+def _toml_value(v) -> str:
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return repr(v)
+    if isinstance(v, str):
+        return '"' + v.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    if isinstance(v, list):
+        return "[" + ", ".join(_toml_value(x) for x in v) + "]"
+    raise TypeError(f"cannot write {type(v).__name__} to TOML")
+
+
+def dumps(cfg: Config) -> str:
+    """Serialize only the values that differ from the defaults, so the file stays short."""
+    default = Config()
+    out = ["# hushtype configuration, written by `hushtype settings`.",
+           "# Only values that differ from the defaults are listed. See the README for all options.", ""]
+    for section in fields(cfg):
+        cur, base = getattr(cfg, section.name), getattr(default, section.name)
+        lines = [f"{f.name} = {_toml_value(getattr(cur, f.name))}"
+                 for f in fields(cur) if getattr(cur, f.name) != getattr(base, f.name)]
+        if lines:
+            out += [f"[{section.name}]", *lines, ""]
+    return "\n".join(out)
+
+
+def save(cfg: Config, path: Path | None = None) -> None:
+    path = path or CONFIG_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(dumps(cfg), encoding="utf-8")
+    tmp.replace(path)
 
 
 def load(path: Path | None = None) -> Config:

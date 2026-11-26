@@ -1,5 +1,6 @@
 # A short sample of how you talk, used as the model's initial prompt.
-# Write a natural sentence or two, not a word list (35 words max).
+# Write a natural sentence or two, not a word list. Keep it short: it shares
+# the prompt budget with the vocabulary.
 #
 # Tip: if you mix English terms into another language, show that here, so the
 # model writes "deploy" instead of transliterating it.

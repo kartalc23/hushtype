@@ -97,14 +97,43 @@ def model_path(name: str) -> str:
         return download_model(name, cache_dir=str(C.MODELS_DIR))
 
 
+def token_counter(model: WhisperModel | None = None, path: str | None = None) -> text.TokenCounter:
+    """Count tokens with Whisper's own tokenizer, or estimate if it is unavailable."""
+    tok = getattr(model, "hf_tokenizer", None)
+    if tok is None and path:
+        try:
+            from tokenizers import Tokenizer
+
+            tok = Tokenizer.from_file(str(Path(path) / "tokenizer.json"))
+        except Exception:
+            tok = None
+    if tok is None:
+        return text.estimate_tokens
+    return lambda s: len(tok.encode(s, add_special_tokens=False).ids)
+
+
 class Transcriber:
     def __init__(self, cfg: C.Config):
         self.cfg = cfg
-        self.hotwords = text.load_vocabulary(
-            cfg.text_path("vocabulary"), cfg.text.max_vocabulary_terms, log)
-        self.prompt = text.load_style(cfg.text_path("style"), cfg.text.max_style_words, log)
-        self.rules = text.load_replacements(cfg.text_path("replacements"), log)
         self.model, self.gpu = self._load()
+        self.reload_text(cfg)
+
+    def reload_text(self, cfg: C.Config) -> None:
+        """(Re)read vocabulary, style and replacements; called on start and on SIGHUP."""
+        self.cfg = cfg
+        p = text.build_prompt(
+            text.read_style(cfg.text_path("style")),
+            text.read_terms(cfg.text_path("vocabulary")),
+            token_counter(self.model),
+            cfg.text.prompt_token_budget,
+        )
+        for line in text.describe_prompt(p):
+            log(line)
+        self.prompt, self.hotwords = p.style, p.hotwords
+        pairs = text.read_replacement_pairs(cfg.text_path("replacements"))
+        self.rules = text.compile_replacements(pairs)
+        if pairs:
+            log(f"replacements: {len(pairs)} rules")
 
     def _load(self):
         """Return (model, on_gpu). The GPU is verified with a real computation."""
@@ -117,6 +146,7 @@ class Transcriber:
                 # broken CUDA setup shows up at startup, not on your first dictation.
                 probe = np.zeros(SAMPLE_RATE, dtype=np.float32)
                 probe[::80] = 0.1
+                self.prompt = self.hotwords = ""
                 self._run(m, probe, vad=False)
                 log("device: GPU (CUDA)")
                 return m, True
@@ -207,10 +237,34 @@ LOCK_FILE_NAME = "hushtype.lock"
 
 
 def running_pid() -> int | None:
+    """PID of the running instance, or None. Uses the lock itself, so stale files don't count."""
+    path = runtime_dir() / LOCK_FILE_NAME
     try:
-        return int((runtime_dir() / LOCK_FILE_NAME).read_text().strip())
+        with open(path) as f:
+            try:
+                fcntl.flock(f, fcntl.LOCK_SH | fcntl.LOCK_NB)
+            except OSError:
+                return int(f.read().strip() or 0) or None  # locked: an instance holds it
+            fcntl.flock(f, fcntl.LOCK_UN)
+            return None
     except (OSError, ValueError):
         return None
+
+
+# ---------------------------------------------------------------- beeps
+
+
+START_TONE, STOP_TONE = 587.33, 392.00  # D5, G4
+
+
+def make_tone(freq: float, audio: C.AudioConfig) -> np.ndarray:
+    """A soft tone with a sin^2 envelope, so there is no click at the edges."""
+    n = int(BEEP_RATE * audio.beep_duration)
+    i = np.arange(n)
+    env = np.sin(np.pi * i / n) ** 2
+    tone = (audio.beep_volume * env * np.sin(2 * np.pi * freq * i / BEEP_RATE)).astype(np.float32)
+    lead = np.zeros(int(BEEP_RATE * audio.beep_lead_silence), dtype=np.float32)
+    return np.concatenate([lead, tone])
 
 
 # ---------------------------------------------------------------- app
@@ -238,14 +292,7 @@ class App:
     # ------------------------------------------------------------ beeps
 
     def _tone(self, freq: float) -> np.ndarray:
-        """A soft tone with a sin^2 envelope, so there is no click at the edges."""
-        a = self.cfg.audio
-        n = int(BEEP_RATE * a.beep_duration)
-        i = np.arange(n)
-        env = np.sin(np.pi * i / n) ** 2
-        tone = (a.beep_volume * env * np.sin(2 * np.pi * freq * i / BEEP_RATE)).astype(np.float32)
-        lead = np.zeros(int(BEEP_RATE * a.beep_lead_silence), dtype=np.float32)
-        return np.concatenate([lead, tone])
+        return make_tone(freq, self.cfg.audio)
 
     def _beep(self, start: bool) -> None:
         if not self.beeps:
@@ -311,6 +358,29 @@ class App:
         self.overlay_state = PROCESSING
         log(f"[rec] {duration:.1f} s, transcribing...")
         self.jobs.put((audio, duration))
+
+    def reload(self, *_):
+        """SIGHUP handler: re-read the config and text files without reloading the model.
+
+        Model, device, hotkeys and UI toggles need a restart; the settings app
+        restarts us when those change.
+        """
+        threading.Thread(target=self._reload, daemon=True).start()
+
+    def _reload(self) -> None:
+        try:
+            cfg = C.load()
+        except Exception as e:
+            log(f"[reload] config not reloaded: {e}")
+            return
+        log("[reload] config and text files reloaded")
+        self.cfg = cfg
+        self.mic = pick_microphone(cfg.audio.microphone)
+        self.beeps = {}
+        if cfg.audio.beeps:
+            self.beeps = {"start": self._tone(START_TONE), "stop": self._tone(STOP_TONE)}
+        if self.transcriber is not None:
+            self.transcriber.reload_text(cfg)
 
     def toggle_recording(self, *_):
         """SIGUSR1 handler: press-to-start / press-to-stop for custom bindings."""
@@ -485,9 +555,10 @@ class App:
         signal.signal(signal.SIGTERM, lambda *_: self.stop.set())
         signal.signal(signal.SIGINT, lambda *_: self.stop.set())
         signal.signal(signal.SIGUSR1, self.toggle_recording)
+        signal.signal(signal.SIGHUP, self.reload)
 
         if self.cfg.audio.beeps:
-            self.beeps = {"start": self._tone(587.33), "stop": self._tone(392.00)}  # D5, G4
+            self.beeps = {"start": self._tone(START_TONE), "stop": self._tone(STOP_TONE)}
         self.mic = pick_microphone(self.cfg.audio.microphone)
         try:
             log(f"microphone: {sd.query_devices(self.mic, 'input')['name']}")

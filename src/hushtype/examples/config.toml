@@ -39,6 +39,9 @@ overlay = true  # animated pill at the bottom of the screen
 tray = true     # system tray icon
 
 [text]
+# Tokens shared by the style sample and vocabulary (32-300). Higher fits more
+# terms but leaves less room for long dictations.
+prompt_token_budget = 224
 # Relative to this directory.
 vocabulary = "vocabulary.txt"
 style = "style.txt"

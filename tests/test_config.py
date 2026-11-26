@@ -44,3 +44,19 @@ def test_env_overrides(monkeypatch, tmp_path):
     cfg = C.load(tmp_path / "missing.toml")
     assert cfg.output.paste is False
     assert cfg.model.language == "de"
+
+
+def test_dumps_writes_only_changes_and_round_trips():
+    cfg = C.Config()
+    assert "[" not in C.dumps(cfg).split("\n", 3)[-1]  # nothing but the header
+    cfg.model.language = 'tr"x'
+    cfg.hotkey.hold = ["ctrl", "alt"]
+    cfg.audio.beep_volume = 0.5
+    cfg.output.paste = False
+    back = C.parse(tomllib.loads(C.dumps(cfg)))
+    assert back == cfg
+
+
+def test_budget_bounds():
+    with pytest.raises(C.ConfigError):
+        C.parse({"text": {"prompt_token_budget": 999}})

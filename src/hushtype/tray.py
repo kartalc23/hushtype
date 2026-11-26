@@ -49,7 +49,14 @@ def main() -> None:
             pass
         tray_icon.stop()
 
+    def settings_clicked(tray_icon=None, item=None):
+        import subprocess
+
+        subprocess.Popen([sys.executable, "-m", "hushtype", "settings"], start_new_session=True,
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
     items = [pystray.MenuItem("hushtype" + (f" ({hint})" if hint else ""), None, enabled=False),
+             pystray.MenuItem("Settings…", settings_clicked),
              pystray.MenuItem("Quit", quit_clicked)]
     tray_icon = pystray.Icon("hushtype", icon(False), "hushtype: ready", pystray.Menu(*items))
 

@@ -31,17 +31,17 @@ say() { printf '\033[1m==> %s\033[0m\n' "$*"; }
 # GTK (overlay, tray) comes from the distro because PyGObject does not install
 # cleanly from pip. The venv is created with --system-site-packages to see it.
 if command -v pacman >/dev/null; then
-    pkgs=(python python-gobject gtk4 gtk4-layer-shell libayatana-appindicator wl-clipboard portaudio cairo pkgconf)
+    pkgs=(python python-gobject gtk4 libadwaita gtk4-layer-shell libayatana-appindicator wl-clipboard portaudio cairo pkgconf)
     missing=()
     for p in "${pkgs[@]}"; do pacman -Qq "$p" >/dev/null 2>&1 || missing+=("$p"); done
     if ((${#missing[@]})); then say "installing: ${missing[*]}"; sudo pacman -S --needed "${missing[@]}"; fi
 elif command -v apt-get >/dev/null; then
-    pkgs=(python3-venv python3-gi gir1.2-gtk-4.0 gir1.2-ayatanaappindicator3-0.1 libgtk4-layer-shell0 gir1.2-gtk4layershell-1.0
+    pkgs=(python3-venv python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-ayatanaappindicator3-0.1 libgtk4-layer-shell0 gir1.2-gtk4layershell-1.0
           wl-clipboard libportaudio2 libcairo2-dev pkg-config python3-dev)
     say "installing (apt): ${pkgs[*]}"
     sudo apt-get install -y "${pkgs[@]}" || echo "some packages failed; the overlay may be unavailable (see README)"
 elif command -v dnf >/dev/null; then
-    pkgs=(python3-gobject gtk4 gtk4-layer-shell libayatana-appindicator-gtk3 wl-clipboard portaudio cairo-devel pkgconf python3-devel)
+    pkgs=(python3-gobject gtk4 libadwaita gtk4-layer-shell libayatana-appindicator-gtk3 wl-clipboard portaudio cairo-devel pkgconf python3-devel)
     say "installing (dnf): ${pkgs[*]}"
     sudo dnf install -y "${pkgs[@]}" || echo "some packages failed; the overlay may be unavailable (see README)"
 else
