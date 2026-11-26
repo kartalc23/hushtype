@@ -32,6 +32,12 @@ CI runs both on every pull request. The unit tests cover the pure-Python parts
 (config, text processing); hotkeys, audio and the overlay need a real desktop,
 so please describe how you tested those in your PR.
 
+To regenerate the settings screenshots in `docs/assets`, use a demo config, never your own:
+
+```bash
+HUSHTYPE_CONFIG_DIR=/path/to/demo HUSHTYPE_SETTINGS_SCREENSHOT=general:docs/assets/settings-general.png hushtype settings
+```
+
 ## Code layout
 
 | Module | Responsibility |
@@ -41,7 +47,8 @@ so please describe how you tested those in your PR.
 | `hotkeys.py` | evdev and portal hotkeys, virtual keyboard, clipboard |
 | `overlay.py` | GTK 4 layer-shell status pill |
 | `tray.py` | Tray icon (separate process: GTK 3 and 4 can't share one) |
-| `config.py` / `text.py` | Config file, vocabulary, style, replacements |
+| `settings.py` | Settings window (GTK 4 + libadwaita), applies changes via SIGHUP or restart |
+| `config.py` / `text.py` | Config file (read and write), vocabulary, style, replacements, prompt budget |
 
 ## Guidelines
 
