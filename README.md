@@ -29,7 +29,7 @@ reports from other desktops are very welcome.
 
 - **Hold-to-talk on any key combo**, including modifier-only ones like `Ctrl+Super`
 - **Pastes into any app**: terminals, browsers, editors, chat apps
-- **Fast on a GPU**: about 14–24x realtime with `large-v3-turbo` on an RTX 3060, so a sentence
+- **Fast on a GPU**: about 14 to 24x realtime with `large-v3-turbo` on an RTX 3060, so a sentence
   appears well under a second after you let go. Runs on CPU too, just slower
 - **Your words, spelled right**: a vocabulary list for names and jargon, a style sample for how
   you talk, and `wrong => right` replacement rules
