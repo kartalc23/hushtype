@@ -10,3 +10,8 @@ Categories=Utility;Accessibility;
 Keywords=dictation;speech;voice;whisper;transcribe;
 StartupNotify=false
 X-KDE-autostart-phase=2
+Actions=Settings;
+
+[Desktop Action Settings]
+Name=Settings
+Exec=@EXEC@ settings

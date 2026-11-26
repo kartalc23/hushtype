@@ -124,6 +124,12 @@ def cmd_transcribe(args, argv) -> None:
     print(result)
 
 
+def cmd_settings(args, argv) -> None:
+    from .settings import main as settings_main
+
+    settings_main()
+
+
 def cmd_mics(args, argv) -> None:
     from .app import list_microphones
 
@@ -136,10 +142,16 @@ def cmd_toggle(args, argv) -> None:
     pid = running_pid()
     if pid is None:
         sys.exit("hushtype is not running")
-    try:
-        os.kill(pid, signal.SIGUSR1)
-    except ProcessLookupError:
-        sys.exit("hushtype is not running (stale lock file)")
+    os.kill(pid, signal.SIGUSR1)
+
+
+def cmd_reload(args, argv) -> None:
+    from .app import running_pid
+
+    pid = running_pid()
+    if pid is None:
+        sys.exit("hushtype is not running")
+    os.kill(pid, signal.SIGHUP)
 
 
 def _copy_resource(name: str, dest: Path, force: bool) -> None:
@@ -208,6 +220,15 @@ def cmd_doctor(args, argv) -> None:
         print((ok if shutil.which(t) else bad) + f"{t} (clipboard)")
     print((ok if shutil.which("systemd-run") else bad) + "systemd-run (app id for the desktop portal)")
     print((ok if DESKTOP_FILE.exists() else bad) + f"desktop entry ({DESKTOP_FILE})")
+    try:
+        import gi
+
+        gi.require_version("Adw", "1")
+        from gi.repository import Adw  # noqa: F401
+
+        print(ok + "libadwaita (settings window)")
+    except Exception:
+        print(bad + "libadwaita (settings window)")
     for mod, why in (("gi", "overlay + tray"), ("cairo", "click-through overlay"),
                      ("evdev", "hotkeys"), ("sounddevice", "microphone")):
         try:
@@ -233,8 +254,10 @@ def build_parser() -> argparse.ArgumentParser:
     t = sub.add_parser("transcribe", help="transcribe an audio file and print the text")
     t.add_argument("file")
     t.add_argument("--language", help='override the language, e.g. "en"')
+    sub.add_parser("settings", help="open the settings window")
     sub.add_parser("mics", help="list microphones")
     sub.add_parser("toggle", help="start/stop recording in the running instance")
+    sub.add_parser("reload", help="re-read config and text files in the running instance")
     i = sub.add_parser("init", help="write a commented config and example text files")
     i.add_argument("--force", action="store_true", help="overwrite existing files")
     d = sub.add_parser("install-desktop", help="add an app menu entry (required for the portal)")
@@ -245,8 +268,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 COMMANDS = {
-    None: cmd_run, "run": cmd_run, "transcribe": cmd_transcribe, "mics": cmd_mics,
-    "toggle": cmd_toggle, "init": cmd_init, "install-desktop": cmd_install_desktop,
+    None: cmd_run, "run": cmd_run, "transcribe": cmd_transcribe, "mics": cmd_mics, "settings": cmd_settings,
+    "toggle": cmd_toggle, "reload": cmd_reload, "init": cmd_init, "install-desktop": cmd_install_desktop,
     "uninstall-desktop": cmd_uninstall_desktop, "doctor": cmd_doctor,
 }
 

@@ -23,24 +23,49 @@ def test_replacement_backslashes_are_literal():
     assert text.apply_replacements("path", rules) == r"C:\new"
 
 
-def test_vocabulary_is_truncated(tmp_path):
-    f = tmp_path / "v.txt"
-    f.write_text("# header\n" + "\n".join(f"term{i}" for i in range(50)))
-    logs = []
-    result = text.load_vocabulary(f, 35, logs.append)
-    assert result.startswith("term0, term1")
-    assert "term34" in result and "term35" not in result
-    assert "35 of 50" in logs[0]
+def words(s):  # stand-in tokenizer: one token per word
+    return len(s.split())
 
 
-def test_style_is_truncated_to_words(tmp_path):
-    f = tmp_path / "s.txt"
-    f.write_text("# ignored\n" + " ".join(["word"] * 40))
-    assert len(text.load_style(f, 35, lambda _: None).split()) == 35
+def test_prompt_fills_budget_in_order():
+    terms = [f"t{i}" for i in range(50)]
+    p = text.build_prompt("", terms, words, budget=10)
+    assert p.terms_used == 10 and p.hotwords.startswith("t0, t1")
+    assert p.dropped[0] == "t10" and p.tokens <= 10
+
+
+def test_style_takes_at_most_half_the_budget():
+    p = text.build_prompt("a " * 40, ["x", "y"], words, budget=20)
+    assert p.style_tokens == 10
+    assert p.terms_used == 2
+
+
+def test_prompt_with_nothing():
+    p = text.build_prompt("", [], words, budget=224)
+    assert (p.style, p.hotwords, p.tokens) == ("", "", 0)
+
+
+def test_read_files_skip_comments_and_duplicates(tmp_path):
+    v = tmp_path / "v.txt"
+    v.write_text("# header\nAlpha\n\nbeta\nalpha\n")
+    assert text.read_terms(v) == ["Alpha", "beta"]
+    s = tmp_path / "s.txt"
+    s.write_text("# c\nHello   there.\nSecond line.\n")
+    assert text.read_style(s) == "Hello there. Second line."
+
+
+def test_round_trip_writers(tmp_path):
+    v, s, r = tmp_path / "v.txt", tmp_path / "s.txt", tmp_path / "r.txt"
+    text.write_terms(v, ["One", " ", "Two"])
+    text.write_style(s, "  How I talk.  ")
+    text.write_replacement_pairs(r, [("foo", "bar"), ("", "x"), ("a b", "c")])
+    assert text.read_terms(v) == ["One", "Two"]
+    assert text.read_style(s) == "How I talk."
+    assert text.read_replacement_pairs(r) == [("foo", "bar"), ("a b", "c")]
 
 
 def test_missing_files_are_fine(tmp_path):
     missing = tmp_path / "nope.txt"
-    assert text.load_vocabulary(missing, 35, print) == ""
-    assert text.load_style(missing, 35, print) == ""
-    assert text.load_replacements(missing, print) == []
+    assert text.read_terms(missing) == []
+    assert text.read_style(missing) == ""
+    assert text.read_replacement_pairs(missing) == []

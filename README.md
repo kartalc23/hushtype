@@ -113,16 +113,41 @@ in your window manager: press once to start, once to stop.
 
 ## Configure
 
-`hushtype init` writes a commented config to `~/.config/hushtype/`:
+Open **Settings** from the tray icon or the app menu (or run `hushtype settings`). Changes apply
+as soon as you save: vocabulary, language, sounds and the microphone reload live, and hushtype
+restarts itself when the model, device, shortcut or UI changes.
+
+<p align="center">
+  <img src="docs/assets/settings-general.png" alt="Settings: language, model, shortcut, microphone and sounds" width="49%" />
+  <img src="docs/assets/settings-vocabulary.png" alt="Settings: vocabulary list with a prompt budget meter" width="49%" />
+</p>
+
+- **General**: language (100 supported), model, GPU/CPU, the shortcut (press the keys to record
+  it), microphone, sounds, paste and clipboard behaviour, overlay and tray.
+- **Vocabulary**: names and jargon to spell right. Reorder by dragging; a meter shows how many
+  terms fit in Whisper's prompt and dims the ones that don't.
+- **Replacements**: `heard as → write as` rules with a live "try it" box.
+- **Style**: a sentence or two that sounds like you.
+
+### Config files
+
+Everything the settings window edits lives in plain files in `~/.config/hushtype/`, so you can
+also edit them by hand, keep them in your dotfiles, or share them:
 
 | File | What it does |
 |---|---|
 | `config.toml` | Model, language, hotkeys, microphone, beeps, overlay, tray ([all options](src/hushtype/examples/config.toml)) |
-| `vocabulary.txt` | Names and terms Whisper should spell correctly, one per line. Only the first 35 are used, so put the most misspelled ones first |
+| `vocabulary.txt` | Names and terms Whisper should spell correctly, one per line, most important first |
 | `style.txt` | A sentence or two showing how you talk. If you mix English terms into another language, show it here and the model stops transliterating them |
 | `replacements.txt` | `wrong => right` rules applied after transcription, for what prompting can't fix |
 
-Restart hushtype after editing. Common tweaks:
+**The prompt budget.** Whisper reads the style sample and vocabulary from a shared window of
+about 224 tokens (`[text] prompt_token_budget`). The style sample takes up to half; vocabulary
+terms fill the rest from the top of the list. Anything over the budget is skipped and logged, so
+keep the words Whisper gets wrong most often at the top, and use replacements for the rest.
+
+After editing files by hand, run `hushtype reload` (model, device, shortcut and UI changes need
+a restart). Common tweaks:
 
 ```toml
 [model]
@@ -201,7 +226,7 @@ Start with `hushtype doctor`, then run `hushtype` in a terminal and watch the lo
 - [ ] Command mode: select text, hold a key, say "make this shorter"
 - [ ] Streaming preview while you speak
 - [ ] AUR package and Flatpak
-- [ ] Translations of the README
+- [ ] Translations of the README and settings window
 
 Ideas and votes are welcome in [issues](https://github.com/kartalc23/hushtype/issues).
 
