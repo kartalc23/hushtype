@@ -1,0 +1,155 @@
+"""Configuration: defaults, the TOML config file and environment overrides.
+
+The config lives at ``$XDG_CONFIG_HOME/hushtype/config.toml`` (usually
+``~/.config/hushtype/config.toml``). Every key is optional; anything missing
+falls back to the defaults below. ``hushtype init`` writes a commented copy.
+"""
+
+from __future__ import annotations
+
+import os
+import tomllib
+from dataclasses import dataclass, field, fields
+from pathlib import Path
+
+APP = "hushtype"
+
+
+def _xdg(var: str, fallback: str) -> Path:
+    return Path(os.environ.get(var) or Path.home() / fallback) / APP
+
+
+CONFIG_DIR = (
+    Path(os.environ["HUSHTYPE_CONFIG_DIR"])
+    if os.environ.get("HUSHTYPE_CONFIG_DIR")
+    else _xdg("XDG_CONFIG_HOME", ".config")
+)
+CACHE_DIR = _xdg("XDG_CACHE_HOME", ".cache")
+STATE_DIR = _xdg("XDG_STATE_HOME", ".local/state")
+MODELS_DIR = CACHE_DIR / "models"
+LOG_FILE = STATE_DIR / "hushtype.log"
+CONFIG_FILE = CONFIG_DIR / "config.toml"
+
+
+@dataclass
+class ModelConfig:
+    name: str = "large-v3-turbo"
+    # ISO 639-1 code ("en", "de", "tr", ...) or "auto". Auto-detection works,
+    # but on very short clips it can guess wrong; pin your language if you
+    # always dictate in one.
+    language: str = "auto"
+    device: str = "auto"  # auto | cuda | cpu
+    beam_size: int = 5
+
+
+@dataclass
+class HotkeyConfig:
+    # evdev path: modifier-only combos work, held down = recording.
+    hold: list[str] = field(default_factory=lambda: ["ctrl", "super"])
+    quit: list[str] = field(default_factory=lambda: ["ctrl", "super", "shift", "q"])
+    # Desktop portal path (used when you are not in the `input` group). The
+    # portal refuses modifier-only shortcuts, so a regular key is required.
+    portal_hold: str = "CTRL+LOGO+z"
+    portal_quit: str = "CTRL+SHIFT+LOGO+q"
+
+
+@dataclass
+class AudioConfig:
+    microphone: str = ""  # empty = system default; a name fragment or a device index
+    min_duration: float = 0.4  # seconds; shorter recordings are ignored
+    silence_warning: float = 0.001  # RMS below this logs a "wrong mic?" warning
+    beeps: bool = True
+    beep_volume: float = 0.28
+    beep_duration: float = 0.14
+    # Bluetooth headsets put an idle audio stream to sleep and swallow the
+    # first ~150 ms. If the start beep is often inaudible, try 0.16.
+    beep_lead_silence: float = 0.0
+
+
+@dataclass
+class OutputConfig:
+    paste: bool = True  # false = only copy to the clipboard, never send Ctrl+V
+    restore_clipboard: bool = True
+
+
+@dataclass
+class UiConfig:
+    overlay: bool = True
+    tray: bool = True
+
+
+@dataclass
+class TextConfig:
+    # Paths are relative to the config directory.
+    vocabulary: str = "vocabulary.txt"
+    style: str = "style.txt"
+    replacements: str = "replacements.txt"
+    # Whisper's prompt window is 224 tokens. Prompt + hotwords that overflow it
+    # leave no room for output ("maximum decoding length must be > 0").
+    max_vocabulary_terms: int = 35
+    max_style_words: int = 35
+
+
+@dataclass
+class Config:
+    model: ModelConfig = field(default_factory=ModelConfig)
+    hotkey: HotkeyConfig = field(default_factory=HotkeyConfig)
+    audio: AudioConfig = field(default_factory=AudioConfig)
+    output: OutputConfig = field(default_factory=OutputConfig)
+    ui: UiConfig = field(default_factory=UiConfig)
+    text: TextConfig = field(default_factory=TextConfig)
+
+    def text_path(self, name: str) -> Path:
+        p = Path(getattr(self.text, name)).expanduser()
+        return p if p.is_absolute() else CONFIG_DIR / p
+
+
+class ConfigError(ValueError):
+    pass
+
+
+def _apply(section_obj, data: dict, section: str) -> None:
+    known = {f.name: f for f in fields(section_obj)}
+    for key, value in data.items():
+        if key not in known:
+            raise ConfigError(f"unknown key [{section}] {key}")
+        current = getattr(section_obj, key)
+        if isinstance(current, bool) and not isinstance(value, bool):
+            raise ConfigError(f"[{section}] {key} must be true or false")
+        if isinstance(current, float) and isinstance(value, int) and not isinstance(value, bool):
+            value = float(value)
+        if type(current) is not type(value):
+            raise ConfigError(
+                f"[{section}] {key} must be {type(current).__name__}, got {type(value).__name__}"
+            )
+        setattr(section_obj, key, value)
+
+
+def parse(data: dict) -> Config:
+    cfg = Config()
+    for section, values in data.items():
+        if section not in {f.name for f in fields(cfg)}:
+            raise ConfigError(f"unknown section [{section}]")
+        if not isinstance(values, dict):
+            raise ConfigError(f"[{section}] must be a table")
+        _apply(getattr(cfg, section), values, section)
+    if cfg.model.device not in ("auto", "cuda", "cpu"):
+        raise ConfigError('[model] device must be "auto", "cuda" or "cpu"')
+    return cfg
+
+
+def load(path: Path | None = None) -> Config:
+    path = path or CONFIG_FILE
+    if path.exists():
+        with open(path, "rb") as f:
+            cfg = parse(tomllib.load(f))
+    else:
+        cfg = Config()
+    # Environment overrides, handy for one-off runs and debugging.
+    if os.environ.get("HUSHTYPE_MICROPHONE") is not None:
+        cfg.audio.microphone = os.environ["HUSHTYPE_MICROPHONE"]
+    if os.environ.get("HUSHTYPE_PASTE") == "0":
+        cfg.output.paste = False
+    if os.environ.get("HUSHTYPE_LANGUAGE"):
+        cfg.model.language = os.environ["HUSHTYPE_LANGUAGE"]
+    return cfg

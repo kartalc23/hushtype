@@ -1,0 +1,10 @@
+# Names and terms Whisper should spell correctly, one per line.
+#
+# Whisper's prompt window is small: only the first 35 terms are used. Put the
+# ones it gets wrong most often at the top.
+# Lines starting with # are ignored.
+
+hushtype
+Kubernetes
+PostgreSQL
+Wayland
