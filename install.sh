@@ -50,7 +50,14 @@ fi
 
 # --- venv ----------------------------------------------------------------------
 extra=""
-if ((cpu == 0)) && command -v nvidia-smi >/dev/null && nvidia-smi -L >/dev/null 2>&1; then
+# Detect the card, not a working driver: right after a driver update nvidia-smi
+# fails until reboot, and we still want the CUDA libraries installed.
+has_nvidia() {
+    [ -e /proc/driver/nvidia/version ] && return 0
+    command -v lspci >/dev/null && lspci -d 10de: 2>/dev/null | grep -qiE 'vga|3d' && return 0
+    grep -qs '^0x10de$' /sys/class/drm/card*/device/vendor
+}
+if ((cpu == 0)) && has_nvidia; then
     extra="[cuda]"
     say "NVIDIA GPU found, installing CUDA libraries into the venv (~1 GB)"
 fi
