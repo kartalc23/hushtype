@@ -33,7 +33,9 @@ reports from other desktops are very welcome.
   appears well under a second after you let go. Runs on CPU too, just slower
 - **Your words, spelled right**: a vocabulary list for names and jargon, a style sample for how
   you talk, and `wrong => right` replacement rules
-- **99 languages**, auto-detected or pinned
+- **100 languages**, auto-detected or pinned
+- **A real settings window**: language, model, shortcut recorder, microphone, vocabulary with a
+  live prompt-budget meter, replacement rules with a tester; changes apply without a restart
 - **Unobtrusive**: a small animated pill at the bottom of the screen while you talk, a tray icon,
   soft start/stop beeps
 - **Leaves no trace**: dictated text is never written to disk or to the log, and the network is
@@ -64,7 +66,7 @@ The first start downloads the model (about 1.6 GB for `large-v3-turbo`) to `~/.c
 <details>
 <summary>Manual install (pipx, other distros)</summary>
 
-Install these from your distro: GTK 4, gtk4-layer-shell, PyGObject, libayatana-appindicator,
+Install these from your distro: GTK 4, libadwaita, gtk4-layer-shell, PyGObject, libayatana-appindicator,
 PortAudio, wl-clipboard (Wayland) or xclip (X11), plus the cairo headers and pkg-config for
 building pycairo. Then:
 
@@ -86,7 +88,25 @@ Start **hushtype** from your app menu (or run `hushtype` in a terminal to watch 
 |---|---|
 | Dictate | Hold **Ctrl + Super**, speak, release |
 | Quit | **Ctrl + Super + Shift + Q**, or tray icon → Quit |
+| Settings | Tray icon → Settings…, the app menu, or `hushtype settings` |
 | Toggle from a script | `hushtype toggle` (start/stop recording in the running instance) |
+
+<details>
+<summary>All commands</summary>
+
+| Command | What it does |
+|---|---|
+| `hushtype` | Start dictation (same as `hushtype run`) |
+| `hushtype settings` | Open the settings window |
+| `hushtype toggle` | Start or stop a recording in the running instance |
+| `hushtype reload` | Re-read config and text files in the running instance |
+| `hushtype transcribe FILE` | Transcribe an audio file and print the text and speed |
+| `hushtype mics` | List microphones |
+| `hushtype doctor` | Check permissions and dependencies |
+| `hushtype init [--force]` | Write a commented config and example text files |
+| `hushtype install-desktop [--autostart]` | Add the app menu entry (and start on login) |
+| `hushtype uninstall-desktop` | Remove the app menu and autostart entries |
+</details>
 
 ### Two ways to catch the hotkey
 
@@ -209,9 +229,12 @@ Start with `hushtype doctor`, then run `hushtype` in a terminal and watch the lo
   install `wtype` (wlroots compositors) or `ydotool`.
 - **"GPU unavailable", running on CPU**: reinstall with the CUDA libraries (`./install.sh`
   without `--cpu`) and make sure the NVIDIA driver works (`nvidia-smi`).
-- **Very low input level warning**: the wrong microphone is selected. Run `hushtype mics` and set
-  `[audio] microphone`.
-- **The start beep is often silent on Bluetooth headphones**: set `beep_lead_silence = 0.16`.
+- **Very low input level warning**: the wrong microphone is selected. Pick the right one in
+  Settings → General → Microphone (or set `[audio] microphone`, see `hushtype mics`).
+- **The start beep is often silent on Bluetooth headphones**: raise "Silence before the start
+  sound" to about 0.16 s in Settings (`beep_lead_silence`).
+- **Some vocabulary terms are ignored**: they are over the prompt budget. The Vocabulary page shows
+  which ones; move the important terms up or turn the rest into replacements.
 
 ## Uninstall
 
@@ -240,7 +263,8 @@ and the [code of conduct](CODE_OF_CONDUCT.md). Security issues: see [SECURITY.md
 - [OpenAI Whisper](https://github.com/openai/whisper) for the speech recognition models
 - [faster-whisper](https://github.com/SYSTRAN/faster-whisper) and
   [CTranslate2](https://github.com/OpenNMT/CTranslate2) for fast inference
-- [gtk4-layer-shell](https://github.com/wmww/gtk4-layer-shell) for the overlay
+- [gtk4-layer-shell](https://github.com/wmww/gtk4-layer-shell) for the overlay and
+  [libadwaita](https://gitlab.gnome.org/GNOME/libadwaita) for the settings window
 
 ## License
 
