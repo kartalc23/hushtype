@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=hushtype
+GenericName=Voice Dictation
+Comment=Hold a key, speak, release: offline speech to text
+Exec=@EXEC@
+Icon=@ICON@
+Terminal=false
+Categories=Utility;Accessibility;
+Keywords=dictation;speech;voice;whisper;transcribe;
+StartupNotify=false
+X-KDE-autostart-phase=2

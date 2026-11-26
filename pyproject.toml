@@ -1,0 +1,64 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hushtype"
+dynamic = ["version"]
+description = "Private, offline hold-to-talk dictation for Linux (Wayland and X11), powered by Whisper."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "kartalc23" }]
+keywords = ["dictation", "speech-to-text", "whisper", "wayland", "linux", "voice-typing", "offline"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: X11 Applications :: GTK",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Desktop Environment",
+]
+dependencies = [
+    "faster-whisper>=1.1",
+    "av>=11",
+    "sounddevice>=0.4.6",
+    "numpy>=1.24",
+    "evdev>=1.6",
+    "pillow>=10",
+    "pystray>=0.19",
+    "jeepney>=0.8",
+    "pycairo>=1.20",
+]
+
+[project.optional-dependencies]
+# GPU acceleration on NVIDIA. ctranslate2 4.x needs CUDA 12 + cuDNN 9.
+cuda = ["nvidia-cublas-cu12", "nvidia-cudnn-cu12>=9,<10"]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[project.scripts]
+hushtype = "hushtype.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/kartalc23/hushtype"
+Issues = "https://github.com/kartalc23/hushtype/issues"
+
+[tool.hatch.version]
+path = "src/hushtype/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hushtype"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

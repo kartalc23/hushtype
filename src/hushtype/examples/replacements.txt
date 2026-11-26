@@ -1,0 +1,8 @@
+# Fixes applied after transcription, for what prompting alone can't fix.
+# Format:  wrong => right
+# Case-insensitive, whole words only.
+# Lines starting with # are ignored.
+
+# Examples:
+# hush type => hushtype
+# post gres => Postgres

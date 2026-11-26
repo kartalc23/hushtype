@@ -1,0 +1,36 @@
+name: Bug report
+description: Something doesn't work
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `hushtype doctor`
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Distro, desktop and session
+      placeholder: e.g. Fedora 43, GNOME 49, Wayland
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU
+      placeholder: e.g. RTX 3060 / none
+  - type: textarea
+    id: log
+    attributes:
+      label: Log excerpt
+      description: From ~/.local/state/hushtype/hushtype.log (it never contains dictated text)
+      render: text

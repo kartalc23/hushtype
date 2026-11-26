@@ -1,0 +1,45 @@
+# hushtype configuration. Every key is optional; delete what you don't change.
+# Location: ~/.config/hushtype/config.toml
+
+[model]
+# Any faster-whisper model: tiny, base, small, medium, large-v3, large-v3-turbo,
+# distil-large-v3 ... Bigger is more accurate but slower and needs more VRAM.
+name = "large-v3-turbo"
+# ISO 639-1 code ("en", "de", "es", "tr", ...) or "auto". Auto-detection can
+# guess wrong on very short clips, so pin it if you always use one language.
+language = "auto"
+device = "auto"        # auto | cuda | cpu
+beam_size = 5
+
+[hotkey]
+# Used when you are in the `input` group (evdev). Modifier-only combos work.
+# Names: ctrl, shift, alt, super, or any key such as "space", "f9", "z".
+hold = ["ctrl", "super"]
+quit = ["ctrl", "super", "shift", "q"]
+# Used through the desktop portal otherwise. A regular key is required here.
+# After the first run you can rebind it in your desktop's shortcut settings.
+portal_hold = "CTRL+LOGO+z"
+portal_quit = "CTRL+SHIFT+LOGO+q"
+
+[audio]
+microphone = ""        # "" = system default; a name fragment or index from `hushtype mics`
+min_duration = 0.4     # seconds; shorter recordings are ignored
+beeps = true
+beep_volume = 0.28
+# Bluetooth headsets often swallow the first ~150 ms of a sound. If you miss
+# the start beep, try 0.16 (recording itself still starts instantly).
+beep_lead_silence = 0.0
+
+[output]
+paste = true             # false = copy to the clipboard only
+restore_clipboard = true # put your previous clipboard back after pasting
+
+[ui]
+overlay = true  # animated pill at the bottom of the screen
+tray = true     # system tray icon
+
+[text]
+# Relative to this directory.
+vocabulary = "vocabulary.txt"
+style = "style.txt"
+replacements = "replacements.txt"
