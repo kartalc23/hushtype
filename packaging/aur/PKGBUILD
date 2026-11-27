@@ -37,7 +37,7 @@ optdepends=(
 )
 install=hushtype.install
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('c6e68b1b7fa94abd4d86ea09ff96a9074ef7f5a3ffbef4561ad404d7e5404dd7')
 
 build() {
   cd "$pkgname-$pkgver"
