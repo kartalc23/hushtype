@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (2026-11-27)
 
 - **Per-app tone** (off by default): hushtype sorts the window you dictate into as personal chat,
   work chat, email or everything else and shapes the text with that kind's tone
