@@ -16,6 +16,7 @@ from . import config as C
 
 DESKTOP_FILE = Path.home() / ".local/share/applications/hushtype.desktop"
 AUTOSTART_FILE = Path.home() / ".config/autostart/hushtype.desktop"
+SYSTEM_DESKTOP_FILE = Path("/usr/share/applications/hushtype.desktop")  # distro packages
 ICON_FILE = Path.home() / ".local/share/icons/hicolor/256x256/apps/hushtype.png"
 
 
@@ -219,7 +220,8 @@ def cmd_doctor(args, argv) -> None:
     for t in tools:
         print((ok if shutil.which(t) else bad) + f"{t} (clipboard)")
     print((ok if shutil.which("systemd-run") else bad) + "systemd-run (app id for the desktop portal)")
-    print((ok if DESKTOP_FILE.exists() else bad) + f"desktop entry ({DESKTOP_FILE})")
+    desktop_entry = next((f for f in (DESKTOP_FILE, SYSTEM_DESKTOP_FILE) if f.exists()), None)
+    print((ok if desktop_entry else bad) + f"desktop entry ({desktop_entry or DESKTOP_FILE})")
     try:
         import gi
 
@@ -236,8 +238,15 @@ def cmd_doctor(args, argv) -> None:
             print(ok + f"python module {mod} ({why})")
         except Exception:
             print(bad + f"python module {mod} ({why})")
-    cuda = list(Path(sys.prefix).glob("lib/python3*/site-packages/nvidia/cublas"))
-    print((ok if cuda else bad) + "pip CUDA libraries (install the [cuda] extra for GPU)")
+    try:
+        import ctranslate2
+
+        gpus = ctranslate2.get_cuda_device_count()
+    except Exception:
+        gpus = 0
+    hint = "the [cuda] extra, or python-ctranslate2-cuda on Arch"
+    extra = "" if gpus else f"; for GPU install {hint}"
+    print((ok if gpus else bad) + f"CUDA GPU for Whisper ({gpus} found){extra}")
 
 
 # ---------------------------------------------------------------- parser

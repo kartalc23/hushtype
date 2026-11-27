@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1 (2026-11-27)
+
+- **Arch package**: a PKGBUILD in `packaging/aur`, installed with `paru -Bi packaging/aur`;
+  `python-ctranslate2-cuda` adds the GPU
+- `hushtype doctor` asks CTranslate2 for CUDA GPUs instead of looking for pip's CUDA folders, so
+  GPU support from distro packages is detected too
+- `hushtype doctor` accepts a system-wide desktop entry (`/usr/share/applications`)
+
 ## 0.2.0 (2026-11-26)
 
 - **Settings window** (`hushtype settings`, tray → Settings, app menu action): language, model,

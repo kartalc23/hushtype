@@ -8,3 +8,9 @@ venv/
 .pytest_cache/
 .ruff_cache/
 *.log
+
+# AUR build artifacts
+packaging/aur/src/
+packaging/aur/pkg/
+packaging/aur/*.tar.*
+packaging/aur/*.pkg.tar.*

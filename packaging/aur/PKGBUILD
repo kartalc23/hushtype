@@ -1,0 +1,60 @@
+# Maintainer: kartalc23 <72359215+kartalc23@users.noreply.github.com>
+pkgname=hushtype
+pkgver=0.2.1
+pkgrel=1
+pkgdesc="Private, offline hold-to-talk dictation for Linux (Wayland and X11), powered by Whisper"
+arch=('any')
+url="https://github.com/kartalc23/hushtype"
+license=('MIT')
+depends=(
+  'python'
+  'python-faster-whisper'
+  'python-av'
+  'python-tokenizers'
+  'python-sounddevice'
+  'python-numpy'
+  'python-evdev'
+  'python-pillow'
+  'python-pystray'
+  'python-jeepney'
+  'python-cairo'
+  'python-gobject'
+  'gtk4'
+  'libadwaita'
+  'gtk4-layer-shell'
+  'libayatana-appindicator'
+  'wl-clipboard'
+  'hicolor-icon-theme'
+)
+makedepends=('python-build' 'python-installer' 'python-hatchling')
+checkdepends=('python-pytest')
+optdepends=(
+  'python-ctranslate2-cuda: GPU (NVIDIA CUDA) acceleration'
+  'wtype: fallback paste method on wlroots compositors'
+  'ydotool: fallback paste method'
+  'xdotool: paste on X11'
+  'xclip: clipboard on X11'
+)
+install=hushtype.install
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "$pkgname-$pkgver"
+  python -m build --wheel --no-isolation
+}
+
+check() {
+  cd "$pkgname-$pkgver"
+  PYTHONPATH=src python -m pytest -q tests
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  python -m installer --destdir="$pkgdir" dist/*.whl
+
+  sed -e 's|@EXEC@|hushtype|' -e 's|@ICON@|hushtype|' src/hushtype/examples/hushtype.desktop \
+    | install -Dm644 /dev/stdin "$pkgdir/usr/share/applications/hushtype.desktop"
+  install -Dm644 docs/assets/icon.png "$pkgdir/usr/share/icons/hicolor/256x256/apps/hushtype.png"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

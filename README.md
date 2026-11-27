@@ -63,6 +63,21 @@ to see what works and what is missing.
 
 The first start downloads the model (about 1.6 GB for `large-v3-turbo`) to `~/.cache/hushtype`.
 
+### Arch Linux (native package)
+
+A PKGBUILD lives in `packaging/aur`. `paru` (or `yay`) pulls the dependencies from the AUR:
+
+```bash
+git clone https://github.com/kartalc23/hushtype.git
+paru -Bi hushtype/packaging/aur  # or: yay -Bi hushtype/packaging/aur
+paru -S python-ctranslate2-cuda  # optional: NVIDIA GPU acceleration
+hushtype init
+```
+
+Then start hushtype from the app menu. CTranslate2 is built from source, so the first install
+takes a while. For hold-to-talk on any key combo, add yourself to the `input` group
+(`sudo usermod -aG input $USER`) and reboot.
+
 <details>
 <summary>Manual install (pipx, other distros)</summary>
 
@@ -228,7 +243,8 @@ Start with `hushtype doctor`, then run `hushtype` in a terminal and watch the lo
 - **Text is copied but not pasted**: check that `/dev/uinput` is writable (`hushtype doctor`), or
   install `wtype` (wlroots compositors) or `ydotool`.
 - **"GPU unavailable", running on CPU**: reinstall with the CUDA libraries (`./install.sh`
-  without `--cpu`) and make sure the NVIDIA driver works (`nvidia-smi`).
+  without `--cpu`, or `python-ctranslate2-cuda` with the Arch package) and make sure the NVIDIA driver works
+  (`nvidia-smi`).
 - **Very low input level warning**: the wrong microphone is selected. Pick the right one in
   Settings → General → Microphone (or set `[audio] microphone`, see `hushtype mics`).
 - **The start beep is often silent on Bluetooth headphones**: raise "Silence before the start
@@ -248,7 +264,8 @@ Start with `hushtype doctor`, then run `hushtype` in a terminal and watch the lo
 - [ ] Per-app style: casual in chat apps, formal in email
 - [ ] Command mode: select text, hold a key, say "make this shorter"
 - [ ] Streaming preview while you speak
-- [ ] AUR package and Flatpak
+- [x] Arch package (PKGBUILD)
+- [ ] Flatpak
 - [ ] Translations of the README and settings window
 
 Ideas and votes are welcome in [issues](https://github.com/kartalc23/hushtype/issues).
