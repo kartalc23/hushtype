@@ -46,3 +46,44 @@ prompt_token_budget = 224
 vocabulary = "vocabulary.txt"
 style = "style.txt"
 replacements = "replacements.txt"
+
+[tone]
+# Per-app tone: shape the text for the app you dictate into. Works on KDE
+# Plasma, sway, Hyprland and X11. Each kind of app gets a tone by name: the
+# built-in tones are default, formal, casual, very_casual and email, and you
+# can change them or add your own under [tones.NAME] (see below).
+enabled = false
+personal = "casual"   # WhatsApp, Telegram, Signal, Discord ...
+work = "default"      # Slack, Teams, Zoom, Mattermost ...
+email = "email"       # Thunderbird, Evolution, Gmail in a browser ...
+other = "default"     # everything else
+
+[apps]
+# Your own rules, checked before the built-in lists: text found in the app id
+# or window title (run `hushtype app` to see them). "other" opts an app out.
+personal = []
+work = []
+email = []
+other = []
+
+# Tones. Only list what you change; anything left out keeps the built-in value.
+# Every key, with what it accepts:
+#
+# [tones.email]
+# case = "capitalize"          # unchanged | capitalize | lowercase (sentence starts;
+#                              #   lowercase keeps vocabulary names, acronyms, "I")
+# final_period = "add"         # unchanged | add | remove | remove_short
+# short_sentences = 2          # remove_short: only messages up to this many sentences
+# layout = "email"             # none | email: greeting and closing on their own
+#                              #   lines, "new paragraph" starts a paragraph, later
+#                              #   takes into the same window start a new paragraph
+# signature = "Alex\nAcme"   # email layout: goes under the closing ("\n" = new line)
+# greetings = ["howdy"]        # extra greetings, on top of hi, hello, dear, merhaba ...
+# closings = ["cheers mate"]   # extra closings, on top of best regards, thanks, saygılarımla ...
+# replacements = ["gonna => going to"]  # wrong => right, only in this tone
+#
+# A tone of your own:
+# [tones.client_chat]
+# case = "capitalize"
+# final_period = "remove_short"
+# replacements = ["yeah => yes"]

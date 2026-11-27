@@ -33,6 +33,9 @@ reports from other desktops are very welcome.
   appears well under a second after you let go. Runs on CPU too, just slower
 - **Your words, spelled right**: a vocabulary list for names and jargon, a style sample for how
   you talk, and `wrong => right` replacement rules
+- **Per-app tone**: no final period in chat apps, an email layout with greeting, paragraphs and
+  your signature in your mail app, and tones you can customise or create. Offline rules on top
+  of Whisper, your words are never rewritten
 - **100 languages**, auto-detected or pinned
 - **A real settings window**: language, model, shortcut recorder, microphone, vocabulary with a
   live prompt-budget meter, replacement rules with a tester; changes apply without a restart
@@ -117,6 +120,7 @@ Start **hushtype** from your app menu (or run `hushtype` in a terminal to watch 
 | `hushtype reload` | Re-read config and text files in the running instance |
 | `hushtype transcribe FILE` | Transcribe an audio file and print the text and speed |
 | `hushtype mics` | List microphones |
+| `hushtype app [--delay N]` | Show the app id, category and tone of the window you switch to |
 | `hushtype doctor` | Check permissions and dependencies |
 | `hushtype init [--force]` | Write a commented config and example text files |
 | `hushtype install-desktop [--autostart]` | Add the app menu entry (and start on login) |
@@ -163,6 +167,91 @@ restarts itself when the model, device, shortcut or UI changes.
   terms fit in Whisper's prompt and dims the ones that don't.
 - **Replacements**: `heard as → write as` rules with a live "try it" box.
 - **Style**: a sentence or two that sounds like you.
+- **Tone**: per-app tone on or off, a tone for each kind of app, a "try it" box, an editor for
+  every tone (add your own), and your own app rules.
+
+### Per-app tone
+
+Off by default; turn it on in Settings → Tone or with `[tone] enabled = true`. hushtype looks at
+the window you start dictating into, sorts it into one of four kinds and shapes the text with
+that kind's tone:
+
+| Kind | Built-in examples | Default tone |
+|---|---|---|
+| Personal chat | WhatsApp, Telegram, Signal, Discord | `casual` |
+| Work chat | Slack, Teams, Zoom, Mattermost, Element | `default` |
+| Email | Thunderbird, Evolution, KMail, Geary; Gmail or Outlook in a browser | `email` |
+| Everything else | editors, terminals, documents | `default` |
+
+A tone is a handful of rules, and every one of them can be changed:
+
+| Tone | Sentence case | Final period | Layout |
+|---|---|---|---|
+| `default` | unchanged | unchanged | none |
+| `formal` | capitalize | always | none |
+| `casual` | unchanged | removed on messages of up to 2 sentences | none |
+| `very_casual` | lowercase (keeps vocabulary names, acronyms, "I") | removed | none |
+| `email` | capitalize | always | email |
+
+The **email layout** puts the greeting and the closing on their own lines and adds your
+signature (here `signature = "Alex"`). Say "new paragraph" (or "yeni paragraf") to start a
+paragraph:
+
+```text
+Whisper:   Hi John, thanks for the update. New paragraph. I will send the files
+           tomorrow. Best regards.
+Pasted:    Hi John,
+
+           Thanks for the update.
+
+           I will send the files tomorrow.
+
+           Best regards,
+           Alex
+```
+
+You can also dictate an email in several takes: each take into the same window within 5
+minutes starts a new paragraph, and a take that opens with a greeting starts a new email. The
+signature only goes under a closing, so it never lands in the middle.
+
+Greetings and closings are recognised in English and Turkish (hi, dear, merhaba, sayın ...;
+best regards, thanks, saygılarımla, iyi çalışmalar ...); add your own per tone.
+
+Change a tone in Settings → Tone → Tones, or in the config. Only list what you change; you can
+also add tones of your own and use them for any kind of app:
+
+```toml
+[tone]
+enabled = true
+personal = "very_casual"
+work = "client_chat"
+
+[tones.email]
+signature = "Alex\nAcme Inc."      # "\n" starts a new line
+closings = ["cheers mate"]
+
+[tones.client_chat]                 # a new tone
+case = "capitalize"
+final_period = "remove_short"
+replacements = ["yeah => yes"]      # wrong => right, only in this tone
+
+[apps]
+work = ["jira", "linear"]           # text in the app id or window title
+other = ["discord"]                 # leave an app alone
+```
+
+All tone keys: `case` (unchanged, capitalize, lowercase), `final_period` (unchanged, add, remove,
+remove_short), `short_sentences`, `layout` (none, email), `signature`, `greetings`, `closings`,
+`replacements` ([commented example](src/hushtype/examples/config.toml)).
+
+In a browser hushtype only sees the page title, so web apps are recognised by keywords in it
+(Gmail, Slack, WhatsApp ...); a tab whose title shows an email address or "Inbox" counts as email,
+which also covers Google Workspace and Outlook on the web. Run `hushtype app` and switch to a window to see how it is sorted.
+
+Detecting the focused window works on **KDE Plasma** (a small KWin script loaded over D-Bus and
+removed on exit), **sway**, **Hyprland** and **X11** (needs `xprop`). GNOME on Wayland offers no
+way to do this without a shell extension, so there every app counts as "everything else". Window
+titles stay in memory and are never logged.
 
 ### Config files
 
@@ -171,7 +260,7 @@ also edit them by hand, keep them in your dotfiles, or share them:
 
 | File | What it does |
 |---|---|
-| `config.toml` | Model, language, hotkeys, microphone, beeps, overlay, tray ([all options](src/hushtype/examples/config.toml)) |
+| `config.toml` | Model, language, hotkeys, microphone, beeps, overlay, tray, per-app tone ([all options](src/hushtype/examples/config.toml)) |
 | `vocabulary.txt` | Names and terms Whisper should spell correctly, one per line, most important first |
 | `style.txt` | A sentence or two showing how you talk. If you mix English terms into another language, show it here and the model stops transliterating them |
 | `replacements.txt` | `wrong => right` rules applied after transcription, for what prompting can't fix |
@@ -215,7 +304,7 @@ hotkey held ──► microphone (16 kHz) ──► hotkey released
                                               │
                          faster-whisper on GPU/CPU (+ vocabulary, style, VAD)
                                               │
-               replacements ──► clipboard ──► virtual Ctrl+V ──► old clipboard restored
+        replacements ──► per-app tone ──► clipboard ──► virtual Ctrl+V ──► old clipboard restored
 ```
 
 - **Hotkeys**: evdev (`/dev/input`) or the xdg-desktop-portal GlobalShortcuts API over D-Bus.
@@ -261,7 +350,8 @@ Start with `hushtype doctor`, then run `hushtype` in a terminal and watch the lo
 
 ## Roadmap
 
-- [ ] Per-app style: casual in chat apps, formal in email
+- [x] Per-app tone: casual in chat apps, formal in email
+- [ ] Optional local LLM rewrite for real tone changes
 - [ ] Command mode: select text, hold a key, say "make this shorter"
 - [ ] Streaming preview while you speak
 - [x] Arch package (PKGBUILD)

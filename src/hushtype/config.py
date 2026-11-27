@@ -8,9 +8,13 @@ falls back to the defaults below. ``hushtype init`` writes a commented copy.
 from __future__ import annotations
 
 import os
+import re
 import tomllib
+from copy import deepcopy
 from dataclasses import dataclass, field, fields
 from pathlib import Path
+
+from .tone import BUILTIN_TONES, CATEGORIES, ToneStyle, builtin_tones, validate_style
 
 APP = "hushtype"
 
@@ -93,6 +97,30 @@ class TextConfig:
 
 
 @dataclass
+class ToneConfig:
+    # Shape the text for the app you dictate into: the tone used for each kind
+    # of app. Tones are defined under [tones.NAME]; see [apps] to sort apps.
+    enabled: bool = False
+    personal: str = "casual"  # WhatsApp, Telegram, Signal, Discord ...
+    work: str = "default"  # Slack, Teams, Zoom, Mattermost ...
+    email: str = "email"  # Thunderbird, Evolution, Gmail in a browser ...
+    other: str = "default"  # everything else
+
+
+@dataclass
+class AppsConfig:
+    # Your own rules, checked before the built-in lists: text found in the app
+    # id or the window title (see `hushtype app`). "other" opts an app out.
+    personal: list[str] = field(default_factory=list)
+    work: list[str] = field(default_factory=list)
+    email: list[str] = field(default_factory=list)
+    other: list[str] = field(default_factory=list)
+
+    def rules(self) -> dict[str, list[str]]:
+        return {"personal": self.personal, "work": self.work, "email": self.email, "other": self.other}
+
+
+@dataclass
 class Config:
     model: ModelConfig = field(default_factory=ModelConfig)
     hotkey: HotkeyConfig = field(default_factory=HotkeyConfig)
@@ -100,6 +128,13 @@ class Config:
     output: OutputConfig = field(default_factory=OutputConfig)
     ui: UiConfig = field(default_factory=UiConfig)
     text: TextConfig = field(default_factory=TextConfig)
+    tone: ToneConfig = field(default_factory=ToneConfig)
+    apps: AppsConfig = field(default_factory=AppsConfig)
+    # Built-in tones plus the user's; [tones.NAME] tables change or add them.
+    tones: dict[str, ToneStyle] = field(default_factory=builtin_tones)
+
+    def style_for(self, category: str) -> ToneStyle:
+        return self.tones.get(getattr(self.tone, category), ToneStyle())
 
     def text_path(self, name: str) -> Path:
         p = Path(getattr(self.text, name)).expanduser()
@@ -127,8 +162,34 @@ def _apply(section_obj, data: dict, section: str) -> None:
         setattr(section_obj, key, value)
 
 
+TONE_NAME = re.compile(r"^[a-z0-9_]{1,32}$")
+
+
+def _parse_tones(cfg: Config, data) -> None:
+    if not isinstance(data, dict):
+        raise ConfigError("[tones] must contain tables like [tones.casual]")
+    for name, values in data.items():
+        if not TONE_NAME.match(name):
+            raise ConfigError(f"tone name '{name}': use a-z, 0-9 and _ only")
+        if not isinstance(values, dict):
+            raise ConfigError(f"[tones.{name}] must be a table")
+        style = deepcopy(BUILTIN_TONES.get(name, ToneStyle()))
+        _apply(style, values, f"tones.{name}")
+        for key in ("greetings", "closings", "replacements"):
+            if not all(isinstance(x, str) for x in getattr(style, key)):
+                raise ConfigError(f"[tones.{name}] {key} must be a list of strings")
+        try:
+            validate_style(name, style)
+        except ValueError as e:
+            raise ConfigError(str(e)) from None
+        cfg.tones[name] = style
+
+
 def parse(data: dict) -> Config:
     cfg = Config()
+    data = dict(data)
+    if "tones" in data:
+        _parse_tones(cfg, data.pop("tones"))
     for section, values in data.items():
         if section not in {f.name for f in fields(cfg)}:
             raise ConfigError(f"unknown section [{section}]")
@@ -137,6 +198,12 @@ def parse(data: dict) -> Config:
         _apply(getattr(cfg, section), values, section)
     if cfg.model.device not in ("auto", "cuda", "cpu"):
         raise ConfigError('[model] device must be "auto", "cuda" or "cpu"')
+    for cat in CATEGORIES:
+        if getattr(cfg.tone, cat) not in cfg.tones:
+            raise ConfigError(f"[tone] {cat}: unknown tone '{getattr(cfg.tone, cat)}' "
+                              f"(known: {', '.join(cfg.tones)})")
+        if not all(isinstance(x, str) for x in getattr(cfg.apps, cat)):
+            raise ConfigError(f"[apps] {cat} must be a list of strings")
     if not 32 <= cfg.text.prompt_token_budget <= 300:
         raise ConfigError("[text] prompt_token_budget must be between 32 and 300")
     return cfg
@@ -151,7 +218,7 @@ def _toml_value(v) -> str:
     if isinstance(v, (int, float)):
         return repr(v)
     if isinstance(v, str):
-        return '"' + v.replace("\\", "\\\\").replace('"', '\\"') + '"'
+        return '"' + v.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'
     if isinstance(v, list):
         return "[" + ", ".join(_toml_value(x) for x in v) + "]"
     raise TypeError(f"cannot write {type(v).__name__} to TOML")
@@ -163,11 +230,19 @@ def dumps(cfg: Config) -> str:
     out = ["# hushtype configuration, written by `hushtype settings`.",
            "# Only values that differ from the defaults are listed. See the README for all options.", ""]
     for section in fields(cfg):
+        if section.name == "tones":
+            continue
         cur, base = getattr(cfg, section.name), getattr(default, section.name)
         lines = [f"{f.name} = {_toml_value(getattr(cur, f.name))}"
                  for f in fields(cur) if getattr(cur, f.name) != getattr(base, f.name)]
         if lines:
             out += [f"[{section.name}]", *lines, ""]
+    for name, style in cfg.tones.items():
+        base = BUILTIN_TONES.get(name, ToneStyle())
+        lines = [f"{f.name} = {_toml_value(getattr(style, f.name))}"
+                 for f in fields(style) if getattr(style, f.name) != getattr(base, f.name)]
+        if lines or name not in BUILTIN_TONES:
+            out += [f"[tones.{name}]", *lines, ""]
     return "\n".join(out)
 
 

@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+- **Per-app tone** (off by default): hushtype sorts the window you dictate into as personal chat,
+  work chat, email or everything else and shapes the text with that kind's tone
+- Tones are customisable rule sets: sentence case, final period, an email layout, a signature,
+  extra greetings and closings, and tone-only replacements. Built in: `default`, `formal`,
+  `casual`, `very_casual`, `email`; change them or add your own under `[tones.NAME]` or in
+  Settings → Tone
+- **Email layout**: greeting and closing on their own lines, "new paragraph" / "yeni paragraf"
+  starts a paragraph, signature under the closing (English and Turkish phrases built in).
+  Dictating in several takes works too: later takes into the same window start a new paragraph
+  (within 5 minutes). Turkish word order is recognised too ("Ahmet Bey merhaba",
+  "İyi çalışmalar dilerim").
+- Webmail is recognised by the address or "Inbox" in the tab title, which covers Google Workspace
+- Focused window detection on KDE Plasma (temporary KWin script over D-Bus), sway, Hyprland and X11
+- `hushtype app` shows a window's app id, category and tone; `hushtype doctor` reports whether
+  focus detection works
+
 ## 0.2.1 (2026-11-27)
 
 - **Arch package**: a PKGBUILD in `packaging/aur`, installed with `paru -Bi packaging/aur`;

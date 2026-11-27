@@ -21,9 +21,9 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk  # noqa: E402
 
-from . import __version__, text  # noqa: E402
+from . import __version__, text, tone  # noqa: E402
 from . import config as C  # noqa: E402
 
 APP_ID = "io.github.kartalc23.hushtype.Settings"
@@ -65,6 +65,18 @@ MODELS = [
 ]
 
 DEVICES = [("auto", "Automatic"), ("cuda", "GPU (CUDA)"), ("cpu", "CPU")]
+
+CASE_ROWS = [("unchanged", "Unchanged"), ("capitalize", "Capitalize sentence starts"),
+             ("lowercase", "Lowercase sentence starts")]
+PERIOD_ROWS = [("unchanged", "Unchanged"), ("add", "Always add"), ("remove", "Always remove"),
+               ("remove_short", "Remove on short messages")]
+LAYOUT_ROWS = [("none", "None"), ("email", "Email: greeting, paragraphs, closing, signature")]
+CATEGORIES = [
+    ("personal", "Personal chat", "WhatsApp, Telegram, Signal, Discord"),
+    ("work", "Work chat", "Slack, Teams, Zoom, Mattermost, Element"),
+    ("email", "Email", "Thunderbird, Evolution, Gmail or Outlook in a browser"),
+    ("other", "Everything else", "Editors, terminals, documents"),
+]
 
 MODIFIER_KEYS = {
     "Control_L": "ctrl", "Control_R": "ctrl", "Shift_L": "shift", "Shift_R": "shift",
@@ -128,6 +140,10 @@ def _combo(rows: list[tuple[str, str]], title: str, current: str, subtitle: str 
     row.set_selected(keys.index(current) if current in keys else 0)
     row.keys = keys
     return row
+
+
+def _split_list(value: str) -> list[str]:
+    return [x.strip() for x in value.split(",") if x.strip()]
 
 
 def _icon_button(icon: str, tooltip: str, callback, *args) -> Gtk.Button:
@@ -257,6 +273,8 @@ class SettingsWindow(Adw.ApplicationWindow):
                                         "edit-find-replace-symbolic")
         self.stack.add_titled_with_icon(self._style_page(), "style", "Style",
                                         "document-edit-symbolic")
+        self.stack.add_titled_with_icon(self._tone_page(), "tone", "Tone",
+                                        "user-available-symbolic")
 
         self.stack.connect("notify::visible-child", self._page_changed)
 
@@ -694,6 +712,201 @@ class SettingsWindow(Adw.ApplicationWindow):
         if n and len(p.style.split()) < n:
             msg += f" · only the first {len(p.style.split())} words fit (half of the budget)"
         self.style_label.set_label(msg)
+
+    # ------------------------------------------------------------ tone
+
+    def _tone_page(self) -> Adw.PreferencesPage:
+        self.tone_page = Adw.PreferencesPage()
+        self.tone_groups: list[Adw.PreferencesGroup] = []
+        self.tone_try_text = "Hi John, thanks for the update. New paragraph. I will send the files " \
+                             "tomorrow. Best regards."
+        self._fill_tone_page()
+        return self.tone_page
+
+    def _fill_tone_page(self) -> None:
+        """(Re)build the page; called again when tones are added or removed."""
+        for g in self.tone_groups:
+            self.tone_page.remove(g)
+        self.tone_groups = []
+        c = self.cfg
+
+        def add(group):
+            self.tone_page.add(group)
+            self.tone_groups.append(group)
+
+        top = Adw.PreferencesGroup(
+            title="Per-app tone",
+            description="Shape the text for the app you dictate into: no final period in chats, an email "
+                        "layout in your mail app. Your words are never rewritten. Works on KDE Plasma, "
+                        "sway, Hyprland and X11.")
+        enabled = Adw.SwitchRow(title="Match the tone to the app")
+        self._bind_switch(enabled, "tone", "enabled")
+        top.add(enabled)
+        add(top)
+
+        names = [(n, n.replace("_", " ").capitalize()) for n in c.tones]
+        kinds = Adw.PreferencesGroup(title="Tone for each kind of app")
+        for key, title, examples in CATEGORIES:
+            row = _combo(names, title, getattr(c.tone, key), examples)
+            self._bind_combo(row, "tone", key)
+            row.connect("notify::selected", lambda *_: self._try_tone())
+            enabled.bind_property("active", row, "sensitive", GObject.BindingFlags.SYNC_CREATE)
+            kinds.add(row)
+        add(kinds)
+
+        test = Adw.PreferencesGroup(title="Try it")
+        self.tone_try = Adw.EntryRow(title="Type what you would say", text=self.tone_try_text)
+        self.tone_result = Gtk.Label(xalign=0, wrap=True, selectable=True, margin_top=8,
+                                     margin_start=12, margin_end=12)
+        self.tone_try.connect("changed", lambda *_: self._try_tone())
+        test.add(self.tone_try)
+        test.add(self.tone_result)
+        add(test)
+
+        tones = Adw.PreferencesGroup(
+            title="Tones",
+            description="What each tone does. Change the built-in ones or add your own.")
+        new = Gtk.Button(icon_name="list-add-symbolic", tooltip_text="Add a tone", valign=Gtk.Align.CENTER)
+        new.add_css_class("flat")
+        new.connect("clicked", lambda *_: self._add_tone())
+        tones.set_header_suffix(new)
+        for name in c.tones:
+            tones.add(self._tone_editor(name))
+        add(tones)
+
+        rules = Adw.PreferencesGroup(
+            title="Your app rules",
+            description="Comma-separated text found in an app id or window title, checked before the "
+                        "built-in lists. Run `hushtype app` to see what a window reports. Put an app "
+                        "under Everything else to leave it alone.")
+        for key, title, _ in CATEGORIES:
+            row = Adw.EntryRow(title=title, text=", ".join(getattr(c.apps, key)))
+
+            def update(r, key=key):
+                setattr(self.cfg.apps, key, _split_list(r.get_text()))
+                self.changed()
+            row.connect("changed", update)
+            rules.add(row)
+        add(rules)
+        self._try_tone()
+
+    def _tone_summary(self, st: tone.ToneStyle) -> str:
+        period = {"add": "adds the final period", "remove": "no final period",
+                  "remove_short": f"no final period up to {st.short_sentences} sentences"}
+        parts = [dict(CASE_ROWS)[st.case] if st.case != "unchanged" else "",
+                 period.get(st.final_period, ""),
+                 "email layout" if st.layout == "email" else "",
+                 (f"{len(st.replacements)} replacement" + ("s" if len(st.replacements) > 1 else ""))
+                 if st.replacements else ""]
+        return " · ".join(p for p in parts if p) or "Leaves the text unchanged"
+
+    def _tone_editor(self, name: str) -> Adw.ExpanderRow:
+        st = self.cfg.tones[name]
+        exp = Adw.ExpanderRow(title=name.replace("_", " ").capitalize(), subtitle=self._tone_summary(st))
+
+        def touched():
+            exp.set_subtitle(self._tone_summary(st))
+            if hasattr(exp, "short_row"):
+                exp.short_row.set_sensitive(st.final_period == "remove_short")
+            self._try_tone()
+            self.changed()
+
+        def combo(rows, title, attr):
+            row = _combo(rows, title, getattr(st, attr))
+
+            def update(*_):
+                setattr(st, attr, row.keys[row.get_selected()])
+                touched()
+            row.connect("notify::selected", update)
+            exp.add_row(row)
+
+        combo(CASE_ROWS, "Sentence case", "case")
+        combo(PERIOD_ROWS, "Final period", "final_period")
+        short = Adw.SpinRow.new_with_range(1, 50, 1)
+        short.set_title("Short message: up to this many sentences")
+        short.set_value(st.short_sentences)
+        short.connect("notify::value", lambda r, *_: (setattr(st, "short_sentences", int(r.get_value())),
+                                                      touched()))
+        short.set_sensitive(st.final_period == "remove_short")
+        exp.short_row = short
+        exp.add_row(short)
+        combo(LAYOUT_ROWS, "Layout", "layout")
+
+        def entry(title, attr, as_list=True):
+            value = getattr(st, attr)
+            row = Adw.EntryRow(title=title, text=", ".join(value) if as_list else value.replace("\n", " | "))
+
+            def update(r):
+                t = r.get_text()
+                lines = "\n".join(x.strip() for x in t.split("|")).strip()
+                setattr(st, attr, _split_list(t) if as_list else lines)
+                touched()
+            row.connect("changed", update)
+            exp.add_row(row)
+
+        entry("Signature (email layout; | starts a new line)", "signature", as_list=False)
+        entry("Extra greetings, comma-separated", "greetings")
+        entry("Extra closings, comma-separated", "closings")
+        entry("Replacements in this tone: going to => gonna, ...", "replacements")
+
+        if name in tone.BUILTIN_TONES:
+            button = Gtk.Button(label="Reset to built-in", halign=Gtk.Align.END, margin_top=6,
+                                margin_bottom=6, margin_end=12)
+            button.connect("clicked", lambda *_: self._reset_tone(name))
+        else:
+            button = Gtk.Button(label="Delete tone", halign=Gtk.Align.END, margin_top=6, margin_bottom=6,
+                                margin_end=12)
+            button.add_css_class("destructive-action")
+            button.connect("clicked", lambda *_: self._delete_tone(name))
+        exp.add_row(button)
+        return exp
+
+    def _add_tone(self) -> None:
+        dlg = Adw.AlertDialog(heading="New tone", body="Lowercase letters, digits and _ only.")
+        name_entry = Gtk.Entry(placeholder_text="e.g. client_chat", activates_default=True)
+        dlg.set_extra_child(name_entry)
+        dlg.add_response("cancel", "Cancel")
+        dlg.add_response("add", "Add")
+        dlg.set_response_appearance("add", Adw.ResponseAppearance.SUGGESTED)
+        dlg.set_default_response("add")
+
+        def respond(_d, response):
+            name = name_entry.get_text().strip().lower().replace(" ", "_")
+            if response != "add" or not name:
+                return
+            if not C.TONE_NAME.match(name) or name in self.cfg.tones:
+                self.toast(f"Cannot add '{name}': invalid or already used")
+                return
+            self.cfg.tones[name] = tone.ToneStyle()
+            self._fill_tone_page()
+            self.changed()
+        dlg.connect("response", respond)
+        dlg.present(self)
+
+    def _reset_tone(self, name: str) -> None:
+        self.cfg.tones[name] = deepcopy(tone.BUILTIN_TONES[name])
+        self._fill_tone_page()
+        self.changed()
+
+    def _delete_tone(self, name: str) -> None:
+        del self.cfg.tones[name]
+        for key, _, _ in CATEGORIES:  # categories using it fall back to default
+            if getattr(self.cfg.tone, key) == name:
+                setattr(self.cfg.tone, key, "default")
+        self._fill_tone_page()
+        self.changed()
+
+    def _try_tone(self) -> None:
+        if not hasattr(self, "tone_result"):
+            return
+        self.tone_try_text = sample = self.tone_try.get_text()
+        lang = self.cfg.model.language if self.cfg.model.language != "auto" else None
+        blocks = []
+        if sample.strip():
+            for key, title, _ in CATEGORIES:
+                out = tone.apply(sample, self.cfg.style_for(key), self.terms, lang)
+                blocks.append(f"<b>{GLib.markup_escape_text(title)}</b>\n{GLib.markup_escape_text(out)}")
+        self.tone_result.set_markup("\n\n".join(blocks))
 
     # ------------------------------------------------------------ save and apply
 

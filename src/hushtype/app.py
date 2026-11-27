@@ -23,13 +23,14 @@ import sounddevice as sd
 from faster_whisper import WhisperModel
 
 from . import config as C
-from . import hotkeys, text
+from . import focus, hotkeys, text, tone
 
 SAMPLE_RATE = 16000
 BEEP_RATE = 44100
 MAX_LOG_BYTES = 512 * 1024
 
 HIDDEN, RECORDING, PROCESSING = 0, 1, 2  # overlay states
+CONTINUE_SECONDS = 5 * 60  # per-app tone: later takes into the same window continue it
 
 
 # ---------------------------------------------------------------- logging
@@ -115,6 +116,8 @@ def token_counter(model: WhisperModel | None = None, path: str | None = None) ->
 class Transcriber:
     def __init__(self, cfg: C.Config):
         self.cfg = cfg
+        self.language: str | None = None
+        self.terms: list[str] = []
         self.model, self.gpu = self._load()
         self.reload_text(cfg)
 
@@ -130,6 +133,7 @@ class Transcriber:
         for line in text.describe_prompt(p):
             log(line)
         self.prompt, self.hotwords = p.style, p.hotwords
+        self.terms = text.read_terms(cfg.text_path("vocabulary"))
         pairs = text.read_replacement_pairs(cfg.text_path("replacements"))
         self.rules = text.compile_replacements(pairs)
         if pairs:
@@ -160,7 +164,7 @@ class Transcriber:
         return m, False
 
     def _run(self, model, audio, vad: bool = True) -> str:
-        segments, _ = model.transcribe(
+        segments, info = model.transcribe(
             audio,
             language=_language(self.cfg),
             beam_size=self.cfg.model.beam_size,
@@ -172,7 +176,9 @@ class Transcriber:
             # hallucinated loops; turn it off.
             condition_on_previous_text=False,
         )
-        return " ".join(s.text.strip() for s in segments).strip()
+        result = " ".join(s.text.strip() for s in segments).strip()
+        self.language = info.language  # detected or pinned; tone needs it for Turkish i/ı
+        return result
 
     def transcribe(self, audio) -> str:
         try:
@@ -287,6 +293,10 @@ class App:
         self.paste_count = 0
         self.beeps: dict = {}
         self.mic = None
+        self.focus: focus.Focus | None = None
+        self.category = "other"  # of the window you started dictating into
+        self.continuing = False  # same window as the previous dictation, recently
+        self._last_target: tuple[str, str, float] | None = None
         self._lock_file = None
 
     # ------------------------------------------------------------ beeps
@@ -328,6 +338,23 @@ class App:
         self._tray_send("recording")
         self._beep(True)
         log("[rec] listening...")
+        self._snapshot_target()
+
+    def _snapshot_target(self) -> None:
+        """Remember which kind of app the text is for. Titles are never logged."""
+        if self.focus is None:
+            return
+        window = self.focus.current()
+        self.category = tone.classify(*window, self.cfg.apps.rules()) if window else "other"
+        # Dictating an email in several takes: later takes into the same window
+        # within CONTINUE_SECONDS start a new paragraph instead of running on.
+        now = time.monotonic()
+        last = self._last_target
+        self.continuing = bool(window and last and last[:2] == tuple(window)
+                               and now - last[2] < CONTINUE_SECONDS)
+        self._last_target = (window[0], window[1], now) if window else None
+        log(f"[tone] {(window[0] if window and window[0] else 'unknown app')} -> {self.category}"
+            f" ({getattr(self.cfg.tone, self.category)})")
 
     def stop_recording(self) -> None:
         if not self.recording:
@@ -357,7 +384,7 @@ class App:
             log(f"[rec] WARNING: very low input level (RMS {rms:.5f}); wrong microphone?")
         self.overlay_state = PROCESSING
         log(f"[rec] {duration:.1f} s, transcribing...")
-        self.jobs.put((audio, duration))
+        self.jobs.put((audio, duration, self.category, self.continuing))
 
     def reload(self, *_):
         """SIGHUP handler: re-read the config and text files without reloading the model.
@@ -381,6 +408,20 @@ class App:
             self.beeps = {"start": self._tone(START_TONE), "stop": self._tone(STOP_TONE)}
         if self.transcriber is not None:
             self.transcriber.reload_text(cfg)
+        self._update_focus()
+
+    def _update_focus(self) -> None:
+        """Track the focused window only while per-app tone is on."""
+        if self.cfg.tone.enabled and self.focus is None:
+            self.focus = focus.open_focus(log)
+            if self.focus.name == "none":
+                log("[tone] cannot see the focused app on this desktop; every app counts as 'other'")
+            else:
+                log(f"[tone] per-app tone on (focus tracking: {self.focus.name})")
+        elif not self.cfg.tone.enabled and self.focus is not None:
+            self.focus.close()
+            self.focus = None
+            log("[tone] per-app tone off")
 
     def toggle_recording(self, *_):
         """SIGUSR1 handler: press-to-start / press-to-stop for custom bindings."""
@@ -435,7 +476,7 @@ class App:
     def _worker(self) -> None:
         while not self.stop.is_set():
             try:
-                audio, duration = self.jobs.get(timeout=0.3)
+                audio, duration, category, continuing = self.jobs.get(timeout=0.3)
             except queue.Empty:
                 continue
             t0 = time.time()
@@ -452,6 +493,9 @@ class App:
                 continue
             speed = duration / elapsed if elapsed else 0
             log(f"[result] {elapsed:.1f} s ({speed:.1f}x realtime) | {len(result.split())} words")
+            if self.focus is not None:
+                result = tone.apply(result, self.cfg.style_for(category), self.transcriber.terms,
+                                    self.transcriber.language, continuing)
             if sys.stdout.isatty():
                 print(f"         {result}", flush=True)  # terminal only, never the log
             self.paste(result)
@@ -570,6 +614,7 @@ class App:
         log(f"ready ({time.time() - t0:.1f} s)")
 
         self.sender = hotkeys.KeySender(log)
+        self._update_focus()
         threading.Thread(target=self._worker, daemon=True).start()
         hint, quit_hint = self._start_hotkeys()
         log(f"{hint}, speak, release. Quit: {quit_hint} or tray > Quit")
@@ -597,4 +642,6 @@ class App:
                 self.tray.kill()
         if self.sender is not None:
             self.sender.close()
+        if self.focus is not None:
+            self.focus.close()
         log("exited")

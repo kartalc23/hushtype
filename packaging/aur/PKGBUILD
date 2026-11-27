@@ -34,6 +34,7 @@ optdepends=(
   'ydotool: fallback paste method'
   'xdotool: paste on X11'
   'xclip: clipboard on X11'
+  'xorg-xprop: per-app tone on X11'
 )
 install=hushtype.install
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")

@@ -137,6 +137,33 @@ def cmd_mics(args, argv) -> None:
     list_microphones(print)
 
 
+def cmd_app(args, argv) -> None:
+    """Show how per-app tone sees a window, to help write [apps] rules."""
+    import time
+
+    from . import focus, tone
+
+    cfg = _load_config()
+    f = focus.open_focus(print, probe=True)
+    if f.name == "none":
+        sys.exit("hushtype: cannot see the focused app on this desktop (GNOME on Wayland is not supported)")
+    try:
+        print(f"switch to the window you want to check, reading it in {args.delay} s...", flush=True)
+        time.sleep(args.delay)
+        window = f.current()
+    finally:
+        f.close()
+    if not window:
+        sys.exit("hushtype: no focused window")
+    app_id, title = window
+    category = tone.classify(app_id, title, cfg.apps.rules())
+    print(f"app id:   {app_id or '(none)'}")
+    print(f"title:    {title or '(none)'}")
+    print(f"browser:  {'yes, the title is matched too' if tone.is_browser(app_id) else 'no'}")
+    print(f"category: {category}")
+    print(f"tone:     {getattr(cfg.tone, category)}" + ("" if cfg.tone.enabled else " (per-app tone is off)"))
+
+
 def cmd_toggle(args, argv) -> None:
     from .app import running_pid
 
@@ -238,6 +265,11 @@ def cmd_doctor(args, argv) -> None:
             print(ok + f"python module {mod} ({why})")
         except Exception:
             print(bad + f"python module {mod} ({why})")
+    from . import focus
+
+    f = focus.open_focus(lambda _m: None, probe=True)
+    print((ok if f.name != "none" else bad) + f"focused app detection for per-app tone ({f.name})")
+    f.close()
     try:
         import ctranslate2
 
@@ -265,6 +297,8 @@ def build_parser() -> argparse.ArgumentParser:
     t.add_argument("--language", help='override the language, e.g. "en"')
     sub.add_parser("settings", help="open the settings window")
     sub.add_parser("mics", help="list microphones")
+    a = sub.add_parser("app", help="show the app id and tone category of a window")
+    a.add_argument("--delay", type=float, default=3, help="seconds to switch windows (default 3)")
     sub.add_parser("toggle", help="start/stop recording in the running instance")
     sub.add_parser("reload", help="re-read config and text files in the running instance")
     i = sub.add_parser("init", help="write a commented config and example text files")
@@ -277,7 +311,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 COMMANDS = {
-    None: cmd_run, "run": cmd_run, "transcribe": cmd_transcribe, "mics": cmd_mics, "settings": cmd_settings,
+    None: cmd_run, "run": cmd_run, "transcribe": cmd_transcribe, "mics": cmd_mics, "app": cmd_app,
+    "settings": cmd_settings,
     "toggle": cmd_toggle, "reload": cmd_reload, "init": cmd_init, "install-desktop": cmd_install_desktop,
     "uninstall-desktop": cmd_uninstall_desktop, "doctor": cmd_doctor,
 }

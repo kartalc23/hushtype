@@ -49,6 +49,8 @@ HUSHTYPE_CONFIG_DIR=/path/to/demo HUSHTYPE_SETTINGS_SCREENSHOT=general:docs/asse
 | `tray.py` | Tray icon (separate process: GTK 3 and 4 can't share one) |
 | `settings.py` | Settings window (GTK 4 + libadwaita), applies changes via SIGHUP or restart |
 | `config.py` / `text.py` | Config file (read and write), vocabulary, style, replacements, prompt budget |
+| `tone.py` | Per-app tone: app categories and text shaping (pure, unit-tested) |
+| `focus.py` | Focused window detection: KWin script over D-Bus, sway, Hyprland, X11 |
 
 ## Guidelines
 
